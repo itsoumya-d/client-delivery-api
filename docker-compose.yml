@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: delivery
+      POSTGRES_USER: delivery
+      POSTGRES_PASSWORD: delivery
+    ports: ["5432:5432"]
+    volumes: ["delivery-db:/var/lib/postgresql/data"]
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgres://delivery:delivery@db:5432/delivery
+      API_KEY: dev-key
+    ports: ["8000:8000"]
+    depends_on: [db]
+volumes:
+  delivery-db:
