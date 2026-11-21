@@ -2,6 +2,7 @@ import Fastify, { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { Database } from "./db.js";
 import { DeliveryService, NotFoundError, ValidationError } from "./service.js";
+import { attachGatewayHooks, TokenBucketRateLimiter, verifyWebhookSignature } from "./middleware.js";
 
 const clientSchema = z.object({ code: z.string().min(1), name: z.string().min(1) });
 const projectSchema = z.object({
@@ -26,16 +27,19 @@ const changeSchema = z.object({
 });
 const decisionSchema = z.object({ approved: z.boolean() });
 
-export function buildApp(db: Database, apiKey: string): FastifyInstance {
+export interface AppOptions {
+  rateLimiter?: TokenBucketRateLimiter;
+  webhookSecret?: string;
+}
+
+export function buildApp(db: Database, apiKey: string, options?: AppOptions): FastifyInstance {
   const app = Fastify({ logger: false });
   const service = new DeliveryService(db);
 
-  app.addHook("preHandler", async (request, reply) => {
-    if (request.url === "/health") return;
-    const provided = request.headers["x-api-key"];
-    if (provided !== apiKey) {
-      reply.code(401).send({ error: "missing or invalid API key" });
-    }
+  attachGatewayHooks(app, {
+    apiKey,
+    rateLimiter: options?.rateLimiter,
+    webhookSecret: options?.webhookSecret
   });
 
   const handle = (error: unknown) => {
@@ -46,6 +50,18 @@ export function buildApp(db: Database, apiKey: string): FastifyInstance {
   };
 
   app.get("/health", async () => ({ status: "ok" }));
+
+  app.post("/webhooks/events", async (request, reply) => {
+    const secret = options?.webhookSecret ?? "whsec_default";
+    const sig = request.headers["x-signature-sha256"] as string;
+    const ts = request.headers["x-signature-timestamp"] as string;
+    const rawPayload = JSON.stringify(request.body ?? {});
+    const verification = verifyWebhookSignature(rawPayload, secret, sig, ts);
+    if (!verification.valid) {
+      return reply.code(401).send({ error: "unauthorized webhook", reason: verification.reason });
+    }
+    return reply.code(200).send({ received: true });
+  });
 
   app.post("/clients", async (request, reply) => {
     try {
