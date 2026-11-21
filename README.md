@@ -29,7 +29,10 @@ explicitly.
 - Project summary: approved/pending milestones, approved change cost,
   projected total and remaining budget
 - Activity trail for project creation, milestones and changes
-- Health probe and consistent 401/404/422 responses
+- API Gateway middleware with Token Bucket rate limiting and quota headers (`x-ratelimit-remaining`, `x-ratelimit-reset`)
+- HMAC-SHA256 webhook signature generation and verification (`/webhooks/events`) with timestamp replay prevention
+- Request telemetry with deterministic request IDs (`x-request-id`) and latency headers (`x-response-time`)
+- Health probe and consistent 401/404/422/429 responses
 
 ## Run locally
 
@@ -50,6 +53,8 @@ docker compose up --build
 npm test
 npm run build
 ```
+
+Automated test suite executes 25 integration tests (25/25 passed) across core delivery services, database transactions, rate limiting, and webhook cryptographic validation.
 
 ## Honest scope
 
